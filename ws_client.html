@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Candle Test</title>
+</head>
+<body>
+    <h2>WebSocket Candle Stream (Check Console)</h2>
+
+    <!-- Socket.IO client -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script>
+        // 🔌 Connect to WebSocket SERVER (5001)
+        const socket = io("http://127.0.0.1:5001");
+
+        socket.on("connect", () => {
+            console.log("🔌 Connected to WebSocket server");
+        });
+
+        socket.on("candle", (candle) => {
+            console.log("🕯️ New candle received:", candle);
+        });
+
+        socket.on("trade", (trade) => {
+            console.log("📈 TRADE EXECUTED:", trade);
+        });
+
+        socket.on("disconnect", () => {
+            console.log("❌ Disconnected from WebSocket server");
+        });
+    </script>
+</body>
+</html>

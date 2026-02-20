@@ -1,0 +1,45 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: #0b1c2d;
+  color: white;
+  font-family: Arial;
+}
+
+header {
+  text-align: center;
+  padding: 15px;
+  background: #12263a;
+}
+
+.timeframe {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.timeframe button {
+  background: #12263a;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.timeframe button.active {
+  background: #ff9800;
+  color: #000;
+}
+
+
+#chart {
+  width: 1200px;
+  height: 500px;
+  margin: 30px auto;
+}
