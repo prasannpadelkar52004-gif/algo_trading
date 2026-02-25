@@ -24,15 +24,11 @@ def dashboard():
 
 database_url = os.environ.get("DATABASE_URL")
 
-url = urlparse(database_url)
+if not database_url:
+    raise Exception("DATABASE_URL not set!")
 
-conn = psycopg2.connect(
-    host=url.hostname,
-    database=url.path[1:],
-    user=url.username,
-    password=url.password,
-    port=url.port
-)
+conn = psycopg2.connect(database_url)
+cur = conn.cursor()
 
 # --------------------------------------------------
 # GLOBAL STATE
