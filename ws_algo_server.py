@@ -1,9 +1,11 @@
 import eventlet
 eventlet.monkey_patch()
 
+import os
+from urllib.parse import urlparse
 from flask import Flask, render_template
 from flask_socketio import SocketIO
-import pyodbc
+import psycopg2
 
 # --------------------------------------------------
 # APP
@@ -20,11 +22,16 @@ def dashboard():
 # DATABASE
 # --------------------------------------------------
 
-conn = pyodbc.connect(
-    "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=localhost;"
-    "DATABASE=algo_trading;"
-    "Trusted_Connection=yes;"
+database_url = os.environ.get("DATABASE_URL")
+
+url = urlparse(database_url)
+
+conn = psycopg2.connect(
+    host=url.hostname,
+    database=url.path[1:],
+    user=url.username,
+    password=url.password,
+    port=url.port
 )
 
 # --------------------------------------------------
@@ -121,11 +128,10 @@ def calculate_supertrend(data, period=10, multiplier=3):
 def load_candles():
     global candles
 
-    cur = conn.cursor()
     cur.execute("""
-        SELECT [time],[open],[high],[low],[close]
-        FROM dbo.nifty_5min_intraday_10days
-        ORDER BY [time]
+        SELECT time, open, high, low, close
+        FROM nifty_5min_intraday_10days
+        ORDER BY time
     """)
 
     rows = cur.fetchall()
@@ -176,4 +182,5 @@ def on_connect():
 
 if __name__ == "__main__":
     load_candles()
-    socketio.run(app, host="127.0.0.1", port=5001)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port)
