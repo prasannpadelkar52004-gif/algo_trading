@@ -176,7 +176,9 @@ def on_connect():
 # START
 # --------------------------------------------------
 
+# LOAD DATA IMMEDIATELY (for Gunicorn)
+load_candles()
+
 if __name__ == "__main__":
-    load_candles()
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
