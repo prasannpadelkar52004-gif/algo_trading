@@ -1,45 +1,56 @@
+const socket = io();
+
+socket.on("connect", () => {
+    console.log("Connected to server");
+});
+
 const chartContainer = document.getElementById("chart");
 
 const chart = LightweightCharts.createChart(chartContainer, {
     width: chartContainer.clientWidth,
     height: 500,
     layout: {
-        backgroundColor: '#0b1c2d',
-        textColor: '#ffffff'
+        background: { color: "#0b1c2d" },
+        textColor: "#ffffff",
     },
-    grid: {
-        vertLines: { color: '#1e2a38' },
-        horzLines: { color: '#1e2a38' }
-    }
 });
 
-// ✅ correct for v5
-const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries);
+const candleSeries = chart.addCandlestickSeries();
 
-// 🔥 REQUIRED
-let signalLines = [];
+let currentSegment = null;
+let lastTrend = null;
 
-// ---------------- DRAW SIGNAL ----------------
-function drawSignal(price, type) {
-    const colorMap = {
-        BUY: "#00ff00",
-        SELL: "#ff3333",
-        SL: "#ffa500"
-    };
+socket.on("candle", (candle) => {
 
-    const line = candleSeries.createPriceLine({
-        price,
-        color: colorMap[type],
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: type
+    const time = Number(candle.time);
+
+    candleSeries.update({
+        time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close
     });
 
-    signalLines.push(line);
-}
+    if (candle.supertrend === null) return;
 
-// ---------------- RESIZE ----------------
-window.addEventListener("resize", () => {
-    chart.applyOptions({ width: chartContainer.clientWidth });
+    const value = candle.supertrend;
+    const trend = candle.trend;
+
+    if (lastTrend === null || trend !== lastTrend) {
+
+        currentSegment = chart.addLineSeries({
+            color: trend ? "#00ff00" : "#ff3333",
+            lineWidth: 2
+        });
+
+    }
+
+    currentSegment.update({
+        time,
+        value
+    });
+
+    lastTrend = trend;
+
 });

@@ -1,18 +1,14 @@
-import eventlet
-eventlet.monkey_patch()
-
 import os
-from urllib.parse import urlparse
+import psycopg2
 from flask import Flask, render_template
 from flask_socketio import SocketIO
-import psycopg2
 
 # --------------------------------------------------
 # APP
 # --------------------------------------------------
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 @app.route("/")
 def dashboard():
@@ -22,13 +18,10 @@ def dashboard():
 # DATABASE
 # --------------------------------------------------
 
-database_url = os.environ.get("DATABASE_URL")
-
-if not database_url:
-    raise Exception("DATABASE_URL not set!")
-
-conn = psycopg2.connect(database_url)
-cur = conn.cursor()
+database_url = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://postgres:omQrLafTJTYjdwRonPmZDfGzeCudZFds@switchyard.proxy.rlwy.net:16123/railway"
+)
 
 # --------------------------------------------------
 # GLOBAL STATE
@@ -39,7 +32,7 @@ candle_index = 0
 stream_started = False
 
 # --------------------------------------------------
-# SUPER TREND (Correct TradingView Logic)
+# SUPER TREND
 # --------------------------------------------------
 
 def calculate_supertrend(data, period=10, multiplier=3):
@@ -68,22 +61,21 @@ def calculate_supertrend(data, period=10, multiplier=3):
 
         prev_close = data[i-1]["close"]
 
-        # True Range
         tr = max(
             high - low,
             abs(high - prev_close),
             abs(low - prev_close)
         )
+
         trs.append(tr)
 
-        # ATR (RMA)
         if i < period:
             atr.append(sum(trs) / len(trs))
         else:
-            atr_val = (atr[i-1] * (period - 1) + tr) / period
-            atr.append(atr_val)
+            atr.append((atr[i-1] * (period - 1) + tr) / period)
 
         hl2 = (high + low) / 2
+
         basic_upper = hl2 + multiplier * atr[i]
         basic_lower = hl2 - multiplier * atr[i]
 
@@ -102,13 +94,11 @@ def calculate_supertrend(data, period=10, multiplier=3):
             else:
                 final_lowerband.append(final_lowerband[i-1])
 
-        # Trend Flip
         if trend[i-1]:
             trend.append(close >= final_lowerband[i])
         else:
             trend.append(close > final_upperband[i])
 
-        # Supertrend value
         if trend[i]:
             supertrend.append(final_lowerband[i])
         else:
@@ -118,11 +108,15 @@ def calculate_supertrend(data, period=10, multiplier=3):
 
 
 # --------------------------------------------------
-# LOAD DATA
+# LOAD HISTORY
 # --------------------------------------------------
 
 def load_candles():
+
     global candles
+
+    conn = psycopg2.connect(database_url)
+    cur = conn.cursor()
 
     cur.execute("""
         SELECT time, open, high, low, close
@@ -133,11 +127,11 @@ def load_candles():
     rows = cur.fetchall()
 
     candles = [{
-        "time": int(r.time.timestamp()),  # MUST BE SECONDS
-        "open": float(r.open),
-        "high": float(r.high),
-        "low": float(r.low),
-        "close": float(r.close)
+        "time": int(r[0].timestamp()),
+        "open": float(r[1]),
+        "high": float(r[2]),
+        "low": float(r[3]),
+        "close": float(r[4])
     } for r in rows]
 
     st_values, trend_values = calculate_supertrend(candles, 10, 3)
@@ -146,39 +140,116 @@ def load_candles():
         candles[i]["supertrend"] = st_values[i]
         candles[i]["trend"] = trend_values[i]
 
-    print("✅ Data Loaded with SuperTrend")
+    print("✅ Loaded candles:", len(candles))
+
+    cur.close()
+    conn.close()
 
 
 # --------------------------------------------------
-# STREAM
+# STREAM HISTORY
 # --------------------------------------------------
 
-def stream_data():
+def stream_history():
+
     global candle_index
 
     while candle_index < len(candles):
-        socketio.emit("candle", candles[candle_index])
-        candle_index += 1
-        socketio.sleep(0.5)
 
+        socketio.emit("candle", candles[candle_index])
+
+        candle_index += 1
+
+        socketio.sleep(0.4)
+
+
+# --------------------------------------------------
+# STREAM LIVE
+# --------------------------------------------------
+
+def stream_live_updates():
+
+    global candles
+
+    last_time = candles[-1]["time"]
+
+    while True:
+
+        try:
+
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+
+            cur.execute("""
+                SELECT time, open, high, low, close
+                FROM nifty_5min_intraday_10days
+                ORDER BY time DESC
+                LIMIT 1
+            """)
+
+            r = cur.fetchone()
+
+            if r:
+
+                candle_time = int(r[0].timestamp())
+
+                if candle_time != last_time:
+
+                    new_candle = {
+                        "time": candle_time,
+                        "open": float(r[1]),
+                        "high": float(r[2]),
+                        "low": float(r[3]),
+                        "close": float(r[4])
+                    }
+
+                    candles.append(new_candle)
+
+                    st_values, trend_values = calculate_supertrend(candles, 10, 3)
+
+                    new_candle["supertrend"] = st_values[-1]
+                    new_candle["trend"] = trend_values[-1]
+
+                    socketio.emit("candle", new_candle)
+
+                    last_time = candle_time
+
+            cur.close()
+            conn.close()
+
+        except Exception as e:
+            print("DB ERROR:", e)
+
+        socketio.sleep(2)
+
+
+# --------------------------------------------------
+# CLIENT CONNECT
+# --------------------------------------------------
 
 @socketio.on("connect")
 def on_connect():
-    global stream_started, candle_index
+
+    global stream_started
+
+    print("Client connected")
 
     if not stream_started:
-        candle_index = 0
-        socketio.start_background_task(stream_data)
+
+        socketio.start_background_task(stream_history)
+        socketio.start_background_task(stream_live_updates)
+
         stream_started = True
 
 
 # --------------------------------------------------
-# START
+# START SERVER
 # --------------------------------------------------
 
-# LOAD DATA IMMEDIATELY (for Gunicorn)
 load_candles()
 
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT", 5000))
+
     socketio.run(app, host="0.0.0.0", port=port)

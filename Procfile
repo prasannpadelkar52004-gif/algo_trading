@@ -1,1 +1,1 @@
-﻿web: gunicorn -k eventlet -w 1 ws_algo_server:app
+﻿web: gunicorn --worker-class eventlet -w 1 ws_algo_server:app
