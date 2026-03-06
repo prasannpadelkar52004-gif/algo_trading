@@ -1,1 +1,1 @@
-﻿web: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT ws_algo_server:app
+﻿web: gunicorn --worker-class eventlet -w 1 --preload --bind 0.0.0.0:$PORT ws_algo_server:app
