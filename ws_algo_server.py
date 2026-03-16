@@ -30,6 +30,7 @@ database_url = os.environ.get(
 # GLOBAL STATE
 # --------------------------------------------------
 
+
 candles = []
 candle_index = 0
 stream_started = False
@@ -237,11 +238,13 @@ def on_connect():
 
     print("Client connected")
 
+    # Send history to this client
+    socketio.start_background_task(stream_history)
+
+    # Start live updates only once
     if not stream_started:
 
-        socketio.start_background_task(stream_history)
         socketio.start_background_task(stream_live_updates)
-
         stream_started = True
 
 
